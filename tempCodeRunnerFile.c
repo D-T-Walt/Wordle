@@ -1,5 +1,3 @@
-# Auto detect text files and perform LF normalization
-* text=auto
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
