@@ -1,66 +1,93 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-#include <string.h>
-#include <ctype.h>  // Include the ctype.h library
+#include <unistd.h> // For usleep()
+#include <termios.h> // For non-blocking key input
+#include <fcntl.h>
 
-// Function to generate random numbers
-int random_index(int max) {
-    return rand() % max;
+#define SCREEN_WIDTH 40
+#define SCREEN_HEIGHT 20
+#define PADDLE_HEIGHT 4
+
+int kbhit() {
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
+
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+    ch = getchar();
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+    if (ch != EOF) {
+        ungetc(ch, stdin);
+        return 1;
+    }
+
+    return 0;
+}
+
+void draw(int paddle1Y, int paddle2Y, int ballX, int ballY) {
+    system("clear");
+
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            if (y == 0 || y == SCREEN_HEIGHT - 1) {
+                printf("#");
+            } else if ((x == 1 && y >= paddle1Y && y < paddle1Y + PADDLE_HEIGHT) ||
+                       (x == SCREEN_WIDTH - 2 && y >= paddle2Y && y < paddle2Y + PADDLE_HEIGHT)) {
+                printf("|");
+            } else if (x == ballX && y == ballY) {
+                printf("O");
+            } else {
+                printf(" ");
+            }
+        }
+        printf("\n");
+    }
 }
 
 int main() {
-    // Initialize random seed
-    srand(time(NULL));
+    int paddle1Y = (SCREEN_HEIGHT - PADDLE_HEIGHT) / 2;
+    int paddle2Y = (SCREEN_HEIGHT - PADDLE_HEIGHT) / 2;
+    int ballX = SCREEN_WIDTH / 2, ballY = SCREEN_HEIGHT / 2;
+    int ballDX = 1, ballDY = 1;
 
-    // List of words
-    const char* words[] = {"death", "sport", "couch", "grape", "screw", "mango"};
-    int word_count = sizeof(words) / sizeof(words[0]);
-
-    // Select a random word
-    const char* word = words[random_index(word_count)];
-
-    // Number of attempts allowed
-    int attempts = 6;
-    char guess[7];  // Buffer for user guess (6 letters + 1 for null terminator)
-
-    // Main game loop
-    while (attempts > 0) {
-        // Ask for user input
-        printf("Guess the entire word (6 letters): ");
-        scanf("%6s", guess);
-
-        // Convert guess to lowercase
-        for (int i = 0; i < 6; i++) {
-            guess[i] = tolower(guess[i]);  // Use tolower() for conversion
+    while (1) {
+        // Input
+        if (kbhit()) {
+            char ch = getchar();
+            if (ch == 'w' && paddle1Y > 1) paddle1Y--;
+            if (ch == 's' && paddle1Y < SCREEN_HEIGHT - PADDLE_HEIGHT - 1) paddle1Y++;
+            if (ch == 'i' && paddle2Y > 1) paddle2Y--;
+            if (ch == 'k' && paddle2Y < SCREEN_HEIGHT - PADDLE_HEIGHT - 1) paddle2Y++;
+            if (ch == 'q') break;
         }
 
-        // Check if the guessed word is correct
-        if (strcmp(guess, word) == 0) {
-            printf("\033[0;36mCongratulations! You've guessed the word: %s\n", word);
-            break;
+        // Ball movement
+        ballX += ballDX;
+        ballY += ballDY;
+
+        if (ballY <= 1 || ballY >= SCREEN_HEIGHT - 2) ballDY = -ballDY;
+
+        if ((ballX == 2 && ballY >= paddle1Y && ballY < paddle1Y + PADDLE_HEIGHT) ||
+            (ballX == SCREEN_WIDTH - 3 && ballY >= paddle2Y && ballY < paddle2Y + PADDLE_HEIGHT)) {
+            ballDX = -ballDX;
         }
 
-        // Check the accuracy of the guess and format feedback
-        printf("Feedback: ");
-        for (int i = 0; i < 6; i++) {
-            if (guess[i] == word[i]) {
-                printf("\033[1;32m%c", guess[i]);  // Correct letter
-            } else if (strchr(word, guess[i])) {
-                printf("\033[1;33m%c", guess[i]);  // Letter in word but in the wrong position
-            } else {
-                printf("\033[1;37m%c", guess[i]);  // Letter not in word
-            }
+        if (ballX <= 0 || ballX >= SCREEN_WIDTH - 1) {
+            ballX = SCREEN_WIDTH / 2;
+            ballY = SCREEN_HEIGHT / 2;
         }
-        printf("\033[0m\n");
 
-        // Decrease attempts
-        attempts--;
-
-        // Check if the player has run out of attempts
-        if (attempts == 0) {
-            printf("\033[0;31mSorry, you've run out of attempts. The word was: %s\n", word);
-        }
+        draw(paddle1Y, paddle2Y, ballX, ballY);
+        usleep(50000);
     }
 
     return 0;
